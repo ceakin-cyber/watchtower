@@ -1,13 +1,17 @@
 package com.example.myapplication.ui.incident
 
+import android.app.AlertDialog
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.fragment.findNavController
@@ -24,45 +28,94 @@ class IncidentFragment : Fragment() {
     private lateinit var incidentViewModel: IncidentViewModel
     private val calendar = Calendar.getInstance()
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+    private val evidenceFiles = mutableListOf<String>()
+
+    private val filePickerLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        uris?.let {
+            evidenceFiles.addAll(it.map { uri -> uri.toString() })
+            updateEvidenceCount()
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        incidentViewModel = ViewModelProvider(this).get(IncidentViewModel::class.java)
+        incidentViewModel = ViewModelProvider(
+            this,
+            ViewModelProvider.AndroidViewModelFactory.getInstance(requireActivity().application)
+        )[IncidentViewModel::class.java]
         
         _binding = FragmentIncidentBinding.inflate(inflater, container, false)
-        val root: View = binding.root
+        
+        setupUI()
+        observeViewModel()
+        
+        return binding.root
+    }
 
+    private fun setupUI() {
         setupIncidentTypeSpinner()
+        setupSeveritySpinner()
         setupDateTimePicker()
         setupButtons()
-
-        return root
+        updateEvidenceCount()
     }
 
     private fun setupIncidentTypeSpinner() {
         val incidentTypes = arrayOf(
-            "Security Breach",
-            "System Outage",
-            "Data Loss",
-            "Network Issue",
-            "Hardware Failure",
-            "Software Bug",
+            "Online Harassment",
+            "Cyberbullying",
+            "Text/SMS Harassment",
+            "Phone Call Harassment",
+            "Stalking",
+            "Vandalism",
+            "Theft",
+            "Assault",
+            "Threats",
+            "Fraud/Scam",
+            "Identity Theft",
+            "Trespassing",
+            "Noise Complaint",
+            "Property Damage",
+            "Discrimination",
+            "Sexual Harassment",
+            "Domestic Violence",
+            "Hit and Run",
+            "Vehicle Break-in",
+            "Burglary",
+            "Suspicious Activity",
+            "Lost/Stolen Item",
             "Other"
         )
         
         val adapter = ArrayAdapter(
             requireContext(),
-            android.R.layout.simple_spinner_item,
+            R.layout.spinner_incident_type_item,
             incidentTypes
         )
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        adapter.setDropDownViewResource(R.layout.spinner_incident_type_item)
         binding.spinnerIncidentType.adapter = adapter
     }
 
+    private fun setupSeveritySpinner() {
+        val severityLevels = arrayOf("LOW", "MEDIUM", "HIGH", "CRITICAL")
+        
+        val adapter = ArrayAdapter(
+            requireContext(),
+            android.R.layout.simple_spinner_item,
+            severityLevels
+        )
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        binding.spinnerSeverity.adapter = adapter
+        
+        // Set default to MEDIUM
+        binding.spinnerSeverity.setSelection(1)
+    }
+
     private fun setupDateTimePicker() {
+        // Set current date/time as default
         binding.edittextIncidentDate.setText(dateFormat.format(calendar.time))
         
         binding.edittextIncidentDate.setOnClickListener {
@@ -99,36 +152,123 @@ class IncidentFragment : Fragment() {
     }
 
     private fun setupButtons() {
+        println("DEBUG: Setting up buttons")
+        println("DEBUG: Save button found: ${binding.btnSaveIncident}")
+        
         binding.btnSaveIncident.setOnClickListener {
-            saveIncident()
+            println("DEBUG: Save button clicked")
+            showSaveConfirmation()
         }
         
         binding.btnCancelIncident.setOnClickListener {
             findNavController().popBackStack()
         }
+        
+        binding.btnAddEvidence.setOnClickListener {
+            filePickerLauncher.launch("*/*")
+        }
+    }
+
+    private fun updateEvidenceCount() {
+        val count = evidenceFiles.size
+        binding.textEvidenceCount.text = "$count file${if (count != 1) "s" else ""} selected"
+    }
+
+    private fun showSaveConfirmation() {
+        val incidentType = binding.spinnerIncidentType.selectedItem.toString()
+        val location = binding.edittextLocation.text.toString().trim()
+        val severity = binding.spinnerSeverity.selectedItem.toString()
+        
+        val message = "Are you sure you want to save this incident?\n\n" +
+                "Type: $incidentType\n" +
+                "Location: $location\n" +
+                "Severity: $severity"
+        
+        AlertDialog.Builder(requireContext())
+            .setTitle("Confirm Save Incident")
+            .setMessage(message)
+            .setPositiveButton("Submit Report") { _, _ ->
+                saveIncident()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun saveIncident() {
+        // Validate required fields
         val incidentType = binding.spinnerIncidentType.selectedItem.toString()
-        val description = binding.edittextIncidentDescription.text.toString()
-        val dateTime = binding.edittextIncidentDate.text.toString()
+        val location = binding.edittextLocation.text.toString().trim()
+        val description = binding.edittextIncidentDescription.text.toString().trim()
+        val severityLevel = binding.spinnerSeverity.selectedItem.toString()
+        val reportedToAuthorities = binding.checkboxReportedAuthorities.isChecked
+        val caseNumber = binding.edittextCaseNumber.text.toString().trim()
 
-        if (description.isBlank()) {
-            Toast.makeText(requireContext(), "Please enter a description", Toast.LENGTH_SHORT).show()
+        // Validation
+        if (location.isEmpty()) {
+            showError("Please enter a location")
             return
         }
 
+        if (description.isEmpty()) {
+            showError("Please enter a description")
+            return
+        }
+
+        // Disable save button to prevent double-click
+        binding.btnSaveIncident.isEnabled = false
+        binding.btnSaveIncident.text = "Submitting..."
+
+        // Create incident object
         val incident = Incident(
-            type = incidentType,
+            incident_type = incidentType,
+            location = location,
             description = description,
-            dateTime = dateTime,
-            timestamp = System.currentTimeMillis()
+            evidence_attachments = evidenceFiles.toList(),
+            severity_level = SeverityLevel.valueOf(severityLevel),
+            reported_to_authorities = reportedToAuthorities,
+            case_number = if (caseNumber.isEmpty()) null else caseNumber,
+            timestamp = calendar.timeInMillis
         )
 
-        incidentViewModel.saveIncident(incident)
+        // Save incident
+        incidentViewModel.insertIncident(incident)
+    }
+
+    private fun observeViewModel() {
+        incidentViewModel.operationStatus.observe(viewLifecycleOwner) { (success, message) ->
+            if (message.isNotEmpty()) {
+                // Reset button state
+                binding.btnSaveIncident.isEnabled = true
+                binding.btnSaveIncident.text = "Submit Incident Report"
+                
+                Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
+                if (success) {
+                    // Clear form and navigate back
+                    clearForm()
+                    findNavController().popBackStack()
+                }
+                incidentViewModel.clearOperationStatus()
+            }
+        }
+    }
+
+    private fun showError(message: String) {
+        Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun clearForm() {
+        binding.spinnerIncidentType.setSelection(0)
+        binding.edittextLocation.text?.clear()
+        binding.edittextIncidentDescription.text?.clear()
+        binding.spinnerSeverity.setSelection(1) // Medium
+        binding.checkboxReportedAuthorities.isChecked = false
+        binding.edittextCaseNumber.text?.clear()
+        evidenceFiles.clear()
+        updateEvidenceCount()
         
-        Toast.makeText(requireContext(), "Incident saved successfully", Toast.LENGTH_SHORT).show()
-        findNavController().popBackStack()
+        // Reset date to current
+        calendar.timeInMillis = System.currentTimeMillis()
+        binding.edittextIncidentDate.setText(dateFormat.format(calendar.time))
     }
 
     override fun onDestroyView() {

@@ -1,37 +1,77 @@
 package com.example.myapplication.ui.incident
 
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.myapplication.data.database.IncidentDatabase
+import com.example.myapplication.data.repository.IncidentRepository
+import kotlinx.coroutines.launch
 
-class IncidentViewModel : ViewModel() {
+class IncidentViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val _incidents = MutableLiveData<MutableList<Incident>>().apply {
-        value = mutableListOf()
-    }
-    val incidents: LiveData<MutableList<Incident>> = _incidents
+    private val repository: IncidentRepository
+    val allIncidents: LiveData<List<Incident>>
 
-    private val _saveStatus = MutableLiveData<Boolean>()
-    val saveStatus: LiveData<Boolean> = _saveStatus
+    private val _operationStatus = MutableLiveData<Pair<Boolean, String>>()
+    val operationStatus: LiveData<Pair<Boolean, String>> = _operationStatus
 
-    fun saveIncident(incident: Incident) {
-        val currentIncidents = _incidents.value ?: mutableListOf()
-        currentIncidents.add(incident)
-        _incidents.value = currentIncidents
-        _saveStatus.value = true
-    }
-
-    fun getIncidentById(id: String): Incident? {
-        return _incidents.value?.find { it.id == id }
+    init {
+        val incidentDao = IncidentDatabase.getDatabase(application).incidentDao()
+        repository = IncidentRepository(incidentDao)
+        allIncidents = repository.getAllIncidents()
     }
 
-    fun deleteIncident(incidentId: String) {
-        val currentIncidents = _incidents.value ?: mutableListOf()
-        currentIncidents.removeAll { it.id == incidentId }
-        _incidents.value = currentIncidents
+    fun insertIncident(incident: Incident) {
+        viewModelScope.launch {
+            try {
+                println("DEBUG: Attempting to save incident: ${incident.id}")
+                repository.insertIncident(incident)
+                println("DEBUG: Incident saved successfully: ${incident.id}")
+                _operationStatus.postValue(Pair(true, "Incident saved successfully"))
+            } catch (e: Exception) {
+                println("DEBUG: Failed to save incident: ${e.message}")
+                e.printStackTrace()
+                _operationStatus.postValue(Pair(false, "Failed to save incident: ${e.message}"))
+            }
+        }
     }
 
-    fun getAllIncidents(): List<Incident> {
-        return _incidents.value ?: emptyList()
+    fun updateIncident(incident: Incident) {
+        viewModelScope.launch {
+            try {
+                repository.updateIncident(incident)
+                _operationStatus.postValue(Pair(true, "Incident updated successfully"))
+            } catch (e: Exception) {
+                _operationStatus.postValue(Pair(false, "Failed to update incident: ${e.message}"))
+            }
+        }
+    }
+
+    fun deleteIncident(incident: Incident) {
+        viewModelScope.launch {
+            try {
+                repository.deleteIncident(incident)
+                _operationStatus.postValue(Pair(true, "Incident deleted successfully"))
+            } catch (e: Exception) {
+                _operationStatus.postValue(Pair(false, "Failed to delete incident: ${e.message}"))
+            }
+        }
+    }
+
+    fun getIncidentById(id: String, callback: (Incident?) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val incident = repository.getIncidentById(id)
+                callback(incident)
+            } catch (e: Exception) {
+                callback(null)
+            }
+        }
+    }
+
+    fun clearOperationStatus() {
+        _operationStatus.value = Pair(false, "")
     }
 }

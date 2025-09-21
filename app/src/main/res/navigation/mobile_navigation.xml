@@ -13,6 +13,9 @@
         <action
             android:id="@+id/action_home_to_incident"
             app:destination="@id/navigation_incident" />
+        <action
+            android:id="@+id/action_home_to_activity_log"
+            app:destination="@id/navigation_activity_log" />
     </fragment>
 
     <fragment
@@ -32,4 +35,14 @@
         android:name="com.example.myapplication.ui.incident.IncidentFragment"
         android:label="Log Incident"
         tools:layout="@layout/fragment_incident" />
+
+    <fragment
+        android:id="@+id/navigation_activity_log"
+        android:name="com.example.myapplication.ui.activitylog.ActivityLogFragment"
+        android:label="Activity Log"
+        tools:layout="@layout/fragment_activity_log">
+        <action
+            android:id="@+id/action_activity_log_to_home"
+            app:destination="@id/navigation_home" />
+    </fragment>
 </navigation>

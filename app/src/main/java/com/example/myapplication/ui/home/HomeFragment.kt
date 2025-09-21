@@ -39,6 +39,10 @@ class HomeFragment : Fragment() {
             findNavController().navigate(R.id.action_home_to_incident)
         }
 
+        binding.btnViewActivityLog.setOnClickListener {
+            findNavController().navigate(R.id.action_home_to_activity_log)
+        }
+
         return root
     }
 

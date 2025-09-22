@@ -4,17 +4,21 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.example.myapplication.R
 import com.example.myapplication.databinding.ItemIncidentBinding
 import com.example.myapplication.ui.incident.Incident
 import com.example.myapplication.ui.incident.SeverityLevel
+import com.example.myapplication.data.database.EvidenceAttachment
 import java.text.SimpleDateFormat
 import java.util.*
 
 class IncidentAdapter(
-    private val onItemClick: (Incident) -> Unit
+    private val onItemClick: (Incident) -> Unit,
+    private val onAttachmentClick: (EvidenceAttachment) -> Unit,
+    private val getAttachmentsForIncident: (String, (List<EvidenceAttachment>) -> Unit) -> Unit
 ) : ListAdapter<Incident, IncidentAdapter.IncidentViewHolder>(IncidentDiffCallback()) {
 
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
@@ -62,9 +66,28 @@ class IncidentAdapter(
                     textReported.visibility = View.GONE
                 }
 
+                // Setup attachments RecyclerView
+                setupAttachments(incident.id)
+
                 // Click listener
                 root.setOnClickListener {
                     onItemClick(incident)
+                }
+            }
+        }
+
+        private fun setupAttachments(incidentId: String) {
+            getAttachmentsForIncident(incidentId) { attachments ->
+                if (attachments.isNotEmpty()) {
+                    val attachmentAdapter = AttachmentAdapter(onAttachmentClick)
+                    binding.recyclerAttachments.apply {
+                        layoutManager = LinearLayoutManager(context, LinearLayoutManager.HORIZONTAL, false)
+                        adapter = attachmentAdapter
+                        visibility = View.VISIBLE
+                    }
+                    attachmentAdapter.submitList(attachments)
+                } else {
+                    binding.recyclerAttachments.visibility = View.GONE
                 }
             }
         }

@@ -3,9 +3,11 @@ package com.example.myapplication.ui.incident
 import android.app.AlertDialog
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import android.content.ContentResolver
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -17,8 +19,17 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.fragment.findNavController
 import com.example.myapplication.R
 import com.example.myapplication.databinding.FragmentIncidentBinding
+import com.example.myapplication.data.database.EvidenceAttachment
+import com.example.myapplication.data.database.FileType
+import com.example.myapplication.data.repository.EvidenceAttachmentRepository
+import com.example.myapplication.data.database.IncidentDatabase
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class IncidentFragment : Fragment() {
 
@@ -26,13 +37,15 @@ class IncidentFragment : Fragment() {
     private val binding get() = _binding!!
     
     private lateinit var incidentViewModel: IncidentViewModel
+    private lateinit var evidenceRepository: EvidenceAttachmentRepository
     private val calendar = Calendar.getInstance()
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
-    private val evidenceFiles = mutableListOf<String>()
+    private val evidenceFiles = mutableListOf<Uri>()
+    private val savedAttachments = mutableListOf<EvidenceAttachment>()
 
     private val filePickerLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
         uris?.let {
-            evidenceFiles.addAll(it.map { uri -> uri.toString() })
+            evidenceFiles.addAll(it)
             updateEvidenceCount()
         }
     }
@@ -46,6 +59,9 @@ class IncidentFragment : Fragment() {
             this,
             ViewModelProvider.AndroidViewModelFactory.getInstance(requireActivity().application)
         )[IncidentViewModel::class.java]
+        
+        val database = IncidentDatabase.getDatabase(requireActivity().application)
+        evidenceRepository = EvidenceAttachmentRepository(database.evidenceAttachmentDao())
         
         _binding = FragmentIncidentBinding.inflate(inflater, container, false)
         
@@ -174,6 +190,74 @@ class IncidentFragment : Fragment() {
         binding.textEvidenceCount.text = "$count file${if (count != 1) "s" else ""} selected"
     }
 
+    private fun getFileNameFromUri(uri: Uri): String {
+        var fileName = "unknown_file"
+        val cursor = requireContext().contentResolver.query(uri, null, null, null, null)
+        cursor?.use {
+            if (it.moveToFirst()) {
+                val nameIndex = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (nameIndex != -1) {
+                    fileName = it.getString(nameIndex) ?: "unknown_file"
+                }
+            }
+        }
+        return fileName
+    }
+
+    private fun getFileSizeFromUri(uri: Uri): Long {
+        var fileSize = 0L
+        val cursor = requireContext().contentResolver.query(uri, null, null, null, null)
+        cursor?.use {
+            if (it.moveToFirst()) {
+                val sizeIndex = it.getColumnIndex(OpenableColumns.SIZE)
+                if (sizeIndex != -1) {
+                    fileSize = it.getLong(sizeIndex)
+                }
+            }
+        }
+        return fileSize
+    }
+
+    private fun getMimeTypeFromUri(uri: Uri): String? {
+        return requireContext().contentResolver.getType(uri)
+    }
+
+    private fun getFileTypeFromMimeType(mimeType: String?): FileType {
+        return when {
+            mimeType?.startsWith("image/") == true -> FileType.PHOTO
+            mimeType?.startsWith("audio/") == true -> FileType.AUDIO
+            mimeType?.startsWith("video/") == true -> FileType.VIDEO
+            mimeType?.contains("pdf") == true || 
+            mimeType?.contains("document") == true ||
+            mimeType?.contains("text") == true -> FileType.DOCUMENT
+            else -> FileType.OTHER
+        }
+    }
+
+    private fun saveFileToInternalStorage(uri: Uri, fileName: String): String? {
+        return try {
+            val filesDir = File(requireContext().filesDir, "evidence_attachments")
+            if (!filesDir.exists()) {
+                filesDir.mkdirs()
+            }
+            
+            val file = File(filesDir, "${System.currentTimeMillis()}_$fileName")
+            val inputStream = requireContext().contentResolver.openInputStream(uri)
+            val outputStream = FileOutputStream(file)
+            
+            inputStream?.use { input ->
+                outputStream.use { output ->
+                    input.copyTo(output)
+                }
+            }
+            
+            file.absolutePath
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
     private fun showSaveConfirmation() {
         val incidentType = binding.spinnerIncidentType.selectedItem.toString()
         val location = binding.edittextLocation.text.toString().trim()
@@ -218,20 +302,69 @@ class IncidentFragment : Fragment() {
         binding.btnSaveIncident.isEnabled = false
         binding.btnSaveIncident.text = "Submitting..."
 
-        // Create incident object
+        // Create incident object first to get ID
+        val incidentId = java.util.UUID.randomUUID().toString()
         val incident = Incident(
+            id = incidentId,
             incident_type = incidentType,
             location = location,
             description = description,
-            evidence_attachments = evidenceFiles.toList(),
+            evidence_attachments = emptyList(), // Will store attachment IDs separately
             severity_level = SeverityLevel.valueOf(severityLevel),
             reported_to_authorities = reportedToAuthorities,
             case_number = if (caseNumber.isEmpty()) null else caseNumber,
             timestamp = calendar.timeInMillis
         )
 
-        // Save incident
-        incidentViewModel.insertIncident(incident)
+        // Save incident first, then attachments
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                // First, save the incident to ensure it exists in the database
+                val repository = com.example.myapplication.data.repository.IncidentRepository(
+                    com.example.myapplication.data.database.IncidentDatabase.getDatabase(requireContext()).incidentDao()
+                )
+                repository.insertIncident(incident)
+                
+                // Then save files and create evidence attachments
+                for (uri in evidenceFiles) {
+                    val fileName = getFileNameFromUri(uri)
+                    val filePath = saveFileToInternalStorage(uri, fileName)
+                    
+                    if (filePath != null) {
+                        val mimeType = getMimeTypeFromUri(uri)
+                        val fileType = getFileTypeFromMimeType(mimeType)
+                        val fileSize = getFileSizeFromUri(uri)
+                        
+                        val attachment = EvidenceAttachment(
+                            incident_id = incidentId,
+                            file_name = fileName,
+                            file_path = filePath,
+                            file_type = fileType,
+                            file_size = fileSize,
+                            mime_type = mimeType
+                        )
+                        
+                        evidenceRepository.insertAttachment(attachment)
+                        savedAttachments.add(attachment)
+                    }
+                }
+                
+                // Update UI on main thread
+                CoroutineScope(Dispatchers.Main).launch {
+                    binding.btnSaveIncident.isEnabled = true
+                    binding.btnSaveIncident.text = "Submit Incident Report"
+                    Toast.makeText(requireContext(), "Incident saved successfully with ${savedAttachments.size} attachments", Toast.LENGTH_LONG).show()
+                    clearForm()
+                    findNavController().popBackStack()
+                }
+            } catch (e: Exception) {
+                CoroutineScope(Dispatchers.Main).launch {
+                    binding.btnSaveIncident.isEnabled = true
+                    binding.btnSaveIncident.text = "Submit Incident Report"
+                    showError("Failed to save incident: ${e.message}")
+                }
+            }
+        }
     }
 
     private fun observeViewModel() {

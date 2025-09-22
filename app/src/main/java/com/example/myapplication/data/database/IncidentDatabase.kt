@@ -9,13 +9,14 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.myapplication.ui.incident.Incident
 
 @Database(
-    entities = [Incident::class],
-    version = 4,
+    entities = [Incident::class, EvidenceAttachment::class],
+    version = 5,
     exportSchema = false
 )
 abstract class IncidentDatabase : RoomDatabase() {
     
     abstract fun incidentDao(): IncidentDao
+    abstract fun evidenceAttachmentDao(): EvidenceAttachmentDao
     
     companion object {
         @Volatile

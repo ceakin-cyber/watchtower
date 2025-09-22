@@ -1,16 +1,24 @@
 package com.example.myapplication.ui.activitylog
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
+import androidx.core.content.FileProvider
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.myapplication.databinding.FragmentActivityLogBinding
 import com.example.myapplication.ui.incident.Incident
+import com.example.myapplication.data.database.EvidenceAttachment
+import com.example.myapplication.data.database.IncidentDatabase
+import com.example.myapplication.data.repository.EvidenceAttachmentRepository
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
+import java.io.File
 
 class ActivityLogFragment : Fragment() {
 
@@ -19,6 +27,7 @@ class ActivityLogFragment : Fragment() {
 
     private lateinit var activityLogViewModel: ActivityLogViewModel
     private lateinit var incidentAdapter: IncidentAdapter
+    private lateinit var evidenceRepository: EvidenceAttachmentRepository
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -29,6 +38,9 @@ class ActivityLogFragment : Fragment() {
             this,
             ViewModelProvider.AndroidViewModelFactory.getInstance(requireActivity().application)
         )[ActivityLogViewModel::class.java]
+
+        val database = IncidentDatabase.getDatabase(requireActivity().application)
+        evidenceRepository = EvidenceAttachmentRepository(database.evidenceAttachmentDao())
 
         _binding = FragmentActivityLogBinding.inflate(inflater, container, false)
         
@@ -43,9 +55,24 @@ class ActivityLogFragment : Fragment() {
     }
 
     private fun setupRecyclerView() {
-        incidentAdapter = IncidentAdapter { incident ->
-            onIncidentClick(incident)
-        }
+        incidentAdapter = IncidentAdapter(
+            onItemClick = { incident ->
+                onIncidentClick(incident)
+            },
+            onAttachmentClick = { attachment ->
+                onAttachmentClick(attachment)
+            },
+            getAttachmentsForIncident = { incidentId, callback ->
+                lifecycleScope.launch {
+                    try {
+                        val attachments = evidenceRepository.getAttachmentsForIncidentSuspend(incidentId)
+                        callback(attachments)
+                    } catch (e: Exception) {
+                        callback(emptyList())
+                    }
+                }
+            }
+        )
         
         binding.recyclerIncidents.apply {
             adapter = incidentAdapter
@@ -106,6 +133,42 @@ class ActivityLogFragment : Fragment() {
     private fun onIncidentClick(incident: Incident) {
         // TODO: Navigate to incident detail view or show detailed dialog
         // For now, we'll just show a simple implementation
+    }
+
+    private fun onAttachmentClick(attachment: EvidenceAttachment) {
+        try {
+            val file = File(attachment.file_path)
+            if (!file.exists()) {
+                Toast.makeText(requireContext(), "File not found: ${attachment.file_name}", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            val uri = FileProvider.getUriForFile(
+                requireContext(),
+                "${requireContext().packageName}.fileprovider",
+                file
+            )
+
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, attachment.mime_type)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            // Check if there's an app that can handle this intent
+            if (intent.resolveActivity(requireContext().packageManager) != null) {
+                startActivity(intent)
+            } else {
+                // Fallback: try to open with a generic file manager or chooser
+                val chooserIntent = Intent.createChooser(intent, "Open ${attachment.file_name}")
+                if (chooserIntent.resolveActivity(requireContext().packageManager) != null) {
+                    startActivity(chooserIntent)
+                } else {
+                    Toast.makeText(requireContext(), "No app found to open ${attachment.file_name}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        } catch (e: Exception) {
+            Toast.makeText(requireContext(), "Error opening file: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun addTestIncidentButton() {

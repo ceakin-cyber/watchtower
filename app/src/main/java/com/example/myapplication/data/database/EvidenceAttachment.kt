@@ -31,7 +31,7 @@ data class EvidenceAttachment(
     val upload_timestamp: Long = System.currentTimeMillis(),
     val description: String? = null,
     val hash_value: String? = null,
-    val is_encrypted: Boolean = false
+    val is_encrypted: Boolean = true
 )
 
 enum class FileType {

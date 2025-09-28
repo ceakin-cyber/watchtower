@@ -11,6 +11,9 @@ interface IncidentDao {
     @Query("SELECT * FROM incidents ORDER BY timestamp DESC")
     fun getAllIncidents(): LiveData<List<Incident>>
     
+    @Query("SELECT * FROM incidents ORDER BY timestamp DESC")
+    suspend fun getAllIncidentsSuspend(): List<Incident>
+    
     @Query("SELECT * FROM incidents WHERE id = :id")
     suspend fun getIncidentById(id: String): Incident?
     

@@ -9,6 +9,9 @@ interface EvidenceAttachmentDao {
     @Query("SELECT * FROM evidence_attachments WHERE incident_id = :incidentId ORDER BY upload_timestamp DESC")
     fun getAttachmentsForIncident(incidentId: String): LiveData<List<EvidenceAttachment>>
     
+    @Query("SELECT * FROM evidence_attachments ORDER BY upload_timestamp DESC")
+    suspend fun getAllEvidenceSuspend(): List<EvidenceAttachment>
+    
     @Query("SELECT * FROM evidence_attachments WHERE incident_id = :incidentId ORDER BY upload_timestamp DESC")
     suspend fun getAttachmentsForIncidentSuspend(incidentId: String): List<EvidenceAttachment>
     

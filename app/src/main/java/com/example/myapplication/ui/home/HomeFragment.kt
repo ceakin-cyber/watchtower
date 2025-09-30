@@ -43,6 +43,10 @@ class HomeFragment : Fragment() {
             findNavController().navigate(R.id.action_home_to_activity_log)
         }
 
+        binding.btnEmergencyContacts.setOnClickListener {
+            findNavController().navigate(R.id.action_home_to_emergency_contacts)
+        }
+
         return root
     }
 

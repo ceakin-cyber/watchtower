@@ -12,6 +12,7 @@ lifecycleLivedataKtx = "2.9.4"
 lifecycleViewmodelKtx = "2.9.4"
 navigationFragmentKtx = "2.9.4"
 navigationUiKtx = "2.9.4"
+navigationSafeArgs = "2.9.4"
 annotation = "1.9.1"
 
 [libraries]
@@ -31,4 +32,5 @@ androidx-annotation = { group = "androidx.annotation", name = "annotation", vers
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+navigation-safe-args = { id = "androidx.navigation.safeargs.kotlin", version.ref = "navigationSafeArgs" }
 

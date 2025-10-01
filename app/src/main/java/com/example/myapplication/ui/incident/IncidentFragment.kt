@@ -17,6 +17,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.fragment.findNavController
+import androidx.navigation.fragment.navArgs
 import com.example.myapplication.R
 import com.example.myapplication.databinding.FragmentIncidentBinding
 import com.example.myapplication.data.database.EvidenceAttachment
@@ -36,12 +37,15 @@ class IncidentFragment : Fragment() {
     private var _binding: FragmentIncidentBinding? = null
     private val binding get() = _binding!!
     
+    private val args: IncidentFragmentArgs by navArgs()
     private lateinit var incidentViewModel: IncidentViewModel
     private lateinit var evidenceRepository: EvidenceAttachmentRepository
     private val calendar = Calendar.getInstance()
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
     private val evidenceFiles = mutableListOf<Uri>()
     private val savedAttachments = mutableListOf<EvidenceAttachment>()
+    private var isEditMode = false
+    private var editingIncident: Incident? = null
 
     private val filePickerLauncher = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
         uris?.let {
@@ -65,8 +69,15 @@ class IncidentFragment : Fragment() {
         
         _binding = FragmentIncidentBinding.inflate(inflater, container, false)
         
+        // Check if we're in edit mode
+        isEditMode = args.incidentId != null
+        
         setupUI()
         observeViewModel()
+        
+        if (isEditMode) {
+            loadIncidentForEditing()
+        }
         
         return binding.root
     }
@@ -77,6 +88,92 @@ class IncidentFragment : Fragment() {
         setupDateTimePicker()
         setupButtons()
         updateEvidenceCount()
+        
+        // Update UI for edit mode
+        if (isEditMode) {
+            binding.btnSaveIncident.text = "Update Incident"
+            // Change the screen title if possible (this would need to be done via navigation or activity)
+        }
+    }
+    
+    private fun loadIncidentForEditing() {
+        args.incidentId?.let { incidentId ->
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    val database = IncidentDatabase.getDatabase(requireContext())
+                    val incident = database.incidentDao().getIncidentById(incidentId)
+                    
+                    CoroutineScope(Dispatchers.Main).launch {
+                        incident?.let {
+                            editingIncident = it
+                            populateFormWithIncident(it)
+                        }
+                    }
+                } catch (e: Exception) {
+                    CoroutineScope(Dispatchers.Main).launch {
+                        showError("Failed to load incident: ${e.message}")
+                    }
+                }
+            }
+        }
+    }
+    
+    private fun populateFormWithIncident(incident: Incident) {
+        // Set incident type
+        val incidentTypes = arrayOf(
+            "Online Harassment", "Cyberbullying", "Text/SMS Harassment", "Phone Call Harassment",
+            "Stalking", "Vandalism", "Theft", "Assault", "Threats", "Fraud/Scam",
+            "Identity Theft", "Trespassing", "Noise Complaint", "Property Damage",
+            "Discrimination", "Sexual Harassment", "Domestic Violence", "Hit and Run",
+            "Vehicle Break-in", "Burglary", "Suspicious Activity", "Lost/Stolen Item", "Other"
+        )
+        val typeIndex = incidentTypes.indexOf(incident.incident_type)
+        if (typeIndex >= 0) {
+            binding.spinnerIncidentType.setSelection(typeIndex)
+        }
+        
+        // Set location
+        binding.edittextLocation.setText(incident.location)
+        
+        // Set description
+        binding.edittextIncidentDescription.setText(incident.description)
+        
+        // Set severity
+        val severityIndex = when (incident.severity_level) {
+            SeverityLevel.LOW -> 0
+            SeverityLevel.MEDIUM -> 1
+            SeverityLevel.HIGH -> 2
+            SeverityLevel.CRITICAL -> 3
+        }
+        binding.spinnerSeverity.setSelection(severityIndex)
+        
+        // Set reported to authorities
+        binding.checkboxReportedAuthorities.isChecked = incident.reported_to_authorities
+        
+        // Set case number
+        binding.edittextCaseNumber.setText(incident.case_number ?: "")
+        
+        // Set timestamp
+        calendar.timeInMillis = incident.timestamp
+        binding.edittextIncidentDate.setText(dateFormat.format(Date(incident.timestamp)))
+        
+        // Load existing attachments
+        loadExistingAttachments(incident.id)
+    }
+    
+    private fun loadExistingAttachments(incidentId: String) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val attachments = evidenceRepository.getAttachmentsForIncidentSuspend(incidentId)
+                CoroutineScope(Dispatchers.Main).launch {
+                    savedAttachments.clear()
+                    savedAttachments.addAll(attachments)
+                    updateEvidenceCount()
+                }
+            } catch (e: Exception) {
+                // Handle error silently for now
+            }
+        }
     }
 
     private fun setupIncidentTypeSpinner() {
@@ -186,8 +283,18 @@ class IncidentFragment : Fragment() {
     }
 
     private fun updateEvidenceCount() {
-        val count = evidenceFiles.size
-        binding.textEvidenceCount.text = "$count file${if (count != 1) "s" else ""} selected"
+        val newFileCount = evidenceFiles.size
+        val existingFileCount = savedAttachments.size
+        val totalCount = newFileCount + existingFileCount
+        
+        binding.textEvidenceCount.text = when {
+            totalCount == 0 -> "No files selected"
+            isEditMode && existingFileCount > 0 && newFileCount > 0 -> 
+                "$totalCount files ($existingFileCount existing, $newFileCount new)"
+            isEditMode && existingFileCount > 0 -> 
+                "$existingFileCount existing file${if (existingFileCount != 1) "s" else ""}"
+            else -> "$newFileCount file${if (newFileCount != 1) "s" else ""} selected"
+        }
     }
 
     private fun getFileNameFromUri(uri: Uri): String {
@@ -263,15 +370,19 @@ class IncidentFragment : Fragment() {
         val location = binding.edittextLocation.text.toString().trim()
         val severity = binding.spinnerSeverity.selectedItem.toString()
         
-        val message = "Are you sure you want to save this incident?\n\n" +
+        val action = if (isEditMode) "update" else "save"
+        val title = if (isEditMode) "Confirm Update Incident" else "Confirm Save Incident"
+        val buttonText = if (isEditMode) "Update Report" else "Submit Report"
+        
+        val message = "Are you sure you want to $action this incident?\n\n" +
                 "Type: $incidentType\n" +
                 "Location: $location\n" +
                 "Severity: $severity"
         
         AlertDialog.Builder(requireContext())
-            .setTitle("Confirm Save Incident")
+            .setTitle(title)
             .setMessage(message)
-            .setPositiveButton("Submit Report") { _, _ ->
+            .setPositiveButton(buttonText) { _, _ ->
                 saveIncident()
             }
             .setNegativeButton("Cancel", null)
@@ -300,10 +411,12 @@ class IncidentFragment : Fragment() {
 
         // Disable save button to prevent double-click
         binding.btnSaveIncident.isEnabled = false
-        binding.btnSaveIncident.text = "Submitting..."
+        val buttonText = if (isEditMode) "Updating..." else "Submitting..."
+        binding.btnSaveIncident.text = buttonText
 
-        // Create incident object first to get ID
-        val incidentId = java.util.UUID.randomUUID().toString()
+        // Create or update incident object
+        val incidentId = if (isEditMode) editingIncident?.id ?: java.util.UUID.randomUUID().toString() 
+                        else java.util.UUID.randomUUID().toString()
         val incident = Incident(
             id = incidentId,
             incident_type = incidentType,
@@ -319,11 +432,16 @@ class IncidentFragment : Fragment() {
         // Save incident first, then attachments
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                // First, save the incident to ensure it exists in the database
+                // Save or update the incident in the database
                 val repository = com.example.myapplication.data.repository.IncidentRepository(
                     com.example.myapplication.data.database.IncidentDatabase.getDatabase(requireContext()).incidentDao()
                 )
-                repository.insertIncident(incident)
+                
+                if (isEditMode) {
+                    repository.updateIncident(incident)
+                } else {
+                    repository.insertIncident(incident)
+                }
                 
                 // Then save files and create evidence attachments
                 for (uri in evidenceFiles) {
@@ -352,16 +470,30 @@ class IncidentFragment : Fragment() {
                 // Update UI on main thread
                 CoroutineScope(Dispatchers.Main).launch {
                     binding.btnSaveIncident.isEnabled = true
-                    binding.btnSaveIncident.text = "Submit Incident Report"
-                    Toast.makeText(requireContext(), "Incident saved successfully with ${savedAttachments.size} attachments", Toast.LENGTH_LONG).show()
-                    clearForm()
+                    val defaultButtonText = if (isEditMode) "Update Incident" else "Submit Incident Report"
+                    binding.btnSaveIncident.text = defaultButtonText
+                    
+                    val action = if (isEditMode) "updated" else "saved"
+                    val newAttachmentCount = evidenceFiles.size
+                    val totalAttachments = savedAttachments.size + newAttachmentCount
+                    
+                    val message = if (isEditMode && newAttachmentCount > 0) {
+                        "Incident $action successfully with $newAttachmentCount new attachments (total: $totalAttachments)"
+                    } else {
+                        "Incident $action successfully with $totalAttachments attachments"
+                    }
+                    
+                    Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
+                    if (!isEditMode) clearForm()
                     findNavController().popBackStack()
                 }
             } catch (e: Exception) {
                 CoroutineScope(Dispatchers.Main).launch {
                     binding.btnSaveIncident.isEnabled = true
-                    binding.btnSaveIncident.text = "Submit Incident Report"
-                    showError("Failed to save incident: ${e.message}")
+                    val defaultButtonText = if (isEditMode) "Update Incident" else "Submit Incident Report"
+                    binding.btnSaveIncident.text = defaultButtonText
+                    val action = if (isEditMode) "update" else "save"
+                    showError("Failed to $action incident: ${e.message}")
                 }
             }
         }
@@ -372,12 +504,13 @@ class IncidentFragment : Fragment() {
             if (message.isNotEmpty()) {
                 // Reset button state
                 binding.btnSaveIncident.isEnabled = true
-                binding.btnSaveIncident.text = "Submit Incident Report"
+                val defaultButtonText = if (isEditMode) "Update Incident" else "Submit Incident Report"
+                binding.btnSaveIncident.text = defaultButtonText
                 
                 Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
                 if (success) {
                     // Clear form and navigate back
-                    clearForm()
+                    if (!isEditMode) clearForm()
                     findNavController().popBackStack()
                 }
                 incidentViewModel.clearOperationStatus()

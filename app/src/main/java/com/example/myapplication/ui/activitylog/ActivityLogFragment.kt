@@ -10,6 +10,7 @@ import android.widget.Toast
 import androidx.core.content.FileProvider
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
+import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.myapplication.databinding.FragmentActivityLogBinding
 import com.example.myapplication.ui.incident.Incident
@@ -58,6 +59,9 @@ class ActivityLogFragment : Fragment() {
         incidentAdapter = IncidentAdapter(
             onItemClick = { incident ->
                 onIncidentClick(incident)
+            },
+            onEditClick = { incident ->
+                onEditIncidentClick(incident)
             },
             onAttachmentClick = { attachment ->
                 onAttachmentClick(attachment)
@@ -133,6 +137,11 @@ class ActivityLogFragment : Fragment() {
     private fun onIncidentClick(incident: Incident) {
         // TODO: Navigate to incident detail view or show detailed dialog
         // For now, we'll just show a simple implementation
+    }
+    
+    private fun onEditIncidentClick(incident: Incident) {
+        val action = ActivityLogFragmentDirections.actionActivityLogToEditIncident(incident.id)
+        findNavController().navigate(action)
     }
 
     private fun onAttachmentClick(attachment: EvidenceAttachment) {

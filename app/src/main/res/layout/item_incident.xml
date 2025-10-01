@@ -20,8 +20,19 @@
             android:text="Security Breach"
             android:textSize="18sp"
             android:textStyle="bold"
-            app:layout_constraintEnd_toStartOf="@+id/text_severity"
+            app:layout_constraintEnd_toStartOf="@+id/btn_edit_incident"
             app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Edit Button -->
+        <ImageButton
+            android:id="@+id/btn_edit_incident"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_menu_edit"
+            android:contentDescription="Edit incident"
+            app:layout_constraintEnd_toStartOf="@+id/text_severity"
             app:layout_constraintTop_toTopOf="parent" />
 
         <!-- Severity Badge -->

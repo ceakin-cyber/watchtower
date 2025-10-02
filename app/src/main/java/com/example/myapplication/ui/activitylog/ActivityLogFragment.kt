@@ -19,6 +19,8 @@ import com.example.myapplication.data.database.IncidentDatabase
 import com.example.myapplication.data.repository.EvidenceAttachmentRepository
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 
 class ActivityLogFragment : Fragment() {
@@ -29,6 +31,8 @@ class ActivityLogFragment : Fragment() {
     private lateinit var activityLogViewModel: ActivityLogViewModel
     private lateinit var incidentAdapter: IncidentAdapter
     private lateinit var evidenceRepository: EvidenceAttachmentRepository
+    private lateinit var pdfExporter: IncidentPdfExporter
+    private var currentIncidents: List<Incident> = emptyList()
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -42,11 +46,12 @@ class ActivityLogFragment : Fragment() {
 
         val database = IncidentDatabase.getDatabase(requireActivity().application)
         evidenceRepository = EvidenceAttachmentRepository(database.evidenceAttachmentDao())
+        pdfExporter = IncidentPdfExporter(requireContext())
 
         _binding = FragmentActivityLogBinding.inflate(inflater, container, false)
         
         setupRecyclerView()
-        setupRefreshButton()
+        setupExportButton()
         observeViewModel()
         
         // Debug: Add a test incident button temporarily
@@ -103,9 +108,76 @@ class ActivityLogFragment : Fragment() {
         }
     }
 
+    private fun setupExportButton() {
+        binding.btnRefresh.setOnClickListener {
+            // Simply re-observe the existing LiveData (it will automatically fetch fresh data)
+            println("DEBUG: Refresh button clicked")
+            binding.textIncidentCount.text = "Refreshing..."
+            
+            // Also do a direct count check
+            lifecycleScope.launch {
+                try {
+                    val database = com.example.myapplication.data.database.IncidentDatabase.getDatabase(requireContext())
+                    val count = database.incidentDao().getIncidentCount()
+                    println("DEBUG: Direct count check: $count incidents")
+                } catch (e: Exception) {
+                    println("DEBUG: Direct count failed: ${e.message}")
+                }
+            }
+        }
+        
+        // Set up PDF export button
+        binding.btnExportPdf.setOnClickListener {
+            exportToPdf()
+        }
+    }
+
+    private fun exportToPdf() {
+        if (currentIncidents.isEmpty()) {
+            Toast.makeText(requireContext(), "No incidents to export", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        lifecycleScope.launch {
+            try {
+                val pdfFile = withContext(Dispatchers.IO) {
+                    pdfExporter.exportIncidents(currentIncidents)
+                }
+                
+                // Share the PDF file
+                val uri = FileProvider.getUriForFile(
+                    requireContext(),
+                    "${requireContext().packageName}.fileprovider",
+                    pdfFile
+                )
+                
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/pdf"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_SUBJECT, "Incident Activity Report")
+                    putExtra(Intent.EXTRA_TEXT, "Please find the incident activity report attached.")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                
+                val chooserIntent = Intent.createChooser(intent, "Export Incident Report")
+                startActivity(chooserIntent)
+                
+                Toast.makeText(requireContext(), "PDF exported successfully", Toast.LENGTH_SHORT).show()
+                
+            } catch (e: Exception) {
+                println("DEBUG: PDF export failed: ${e.message}")
+                e.printStackTrace()
+                Toast.makeText(requireContext(), "Failed to export PDF: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     private fun observeViewModel() {
         activityLogViewModel.allIncidents.observe(viewLifecycleOwner) { incidents ->
             println("DEBUG: ActivityLog received ${incidents.size} incidents")
+            
+            // Store current incidents for export
+            currentIncidents = incidents
             
             // Update count display
             binding.textIncidentCount.text = "${incidents.size} incident${if (incidents.size != 1) "s" else ""} found"

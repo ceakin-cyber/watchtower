@@ -1,5 +1,6 @@
 package com.example.myapplication.ui.activitylog
 
+import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -67,6 +68,9 @@ class ActivityLogFragment : Fragment() {
             },
             onEditClick = { incident ->
                 onEditIncidentClick(incident)
+            },
+            onDeleteClick = { incident ->
+                onDeleteIncidentClick(incident)
             },
             onAttachmentClick = { attachment ->
                 onAttachmentClick(attachment)
@@ -214,6 +218,36 @@ class ActivityLogFragment : Fragment() {
     private fun onEditIncidentClick(incident: Incident) {
         val action = ActivityLogFragmentDirections.actionActivityLogToEditIncident(incident.id)
         findNavController().navigate(action)
+    }
+    
+    private fun onDeleteIncidentClick(incident: Incident) {
+        AlertDialog.Builder(requireContext())
+            .setTitle("Delete Incident")
+            .setMessage("Are you sure you want to delete this incident?\n\nType: ${incident.incident_type}\nLocation: ${incident.location}\n\nThis action cannot be undone.")
+            .setPositiveButton("Delete") { _, _ ->
+                deleteIncident(incident)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
+    private fun deleteIncident(incident: Incident) {
+        lifecycleScope.launch {
+            try {
+                // Delete associated evidence attachments first
+                evidenceRepository.deleteAttachmentsForIncident(incident.id)
+                
+                // Delete the incident using ViewModel
+                activityLogViewModel.deleteIncident(incident.id)
+                
+                Toast.makeText(requireContext(), "Incident deleted successfully", Toast.LENGTH_SHORT).show()
+                
+            } catch (e: Exception) {
+                Toast.makeText(requireContext(), "Failed to delete incident: ${e.message}", Toast.LENGTH_LONG).show()
+                println("DEBUG: Delete incident failed: ${e.message}")
+                e.printStackTrace()
+            }
+        }
     }
 
     private fun onAttachmentClick(attachment: EvidenceAttachment) {

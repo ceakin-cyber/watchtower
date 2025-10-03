@@ -18,6 +18,7 @@ import java.util.*
 class IncidentAdapter(
     private val onItemClick: (Incident) -> Unit,
     private val onEditClick: (Incident) -> Unit,
+    private val onDeleteClick: (Incident) -> Unit,
     private val onAttachmentClick: (EvidenceAttachment) -> Unit,
     private val getAttachmentsForIncident: (String, (List<EvidenceAttachment>) -> Unit) -> Unit
 ) : ListAdapter<Incident, IncidentAdapter.IncidentViewHolder>(IncidentDiffCallback()) {
@@ -77,6 +78,10 @@ class IncidentAdapter(
                 
                 btnEditIncident.setOnClickListener {
                     onEditClick(incident)
+                }
+                
+                btnDeleteIncident.setOnClickListener {
+                    onDeleteClick(incident)
                 }
             }
         }

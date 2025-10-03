@@ -25,6 +25,10 @@ class IncidentRepository(private val incidentDao: IncidentDao) {
         incidentDao.deleteIncident(incident)
     }
 
+    suspend fun deleteIncidentById(id: String) {
+        incidentDao.deleteIncidentById(id)
+    }
+
     suspend fun getIncidentById(id: String): Incident? {
         return incidentDao.getIncidentById(id)
     }

@@ -30,4 +30,10 @@ class ActivityLogViewModel(application: Application) : AndroidViewModel(applicat
             }
         }
     }
+
+    fun deleteIncident(incidentId: String) {
+        viewModelScope.launch {
+            repository.deleteIncidentById(incidentId)
+        }
+    }
 }

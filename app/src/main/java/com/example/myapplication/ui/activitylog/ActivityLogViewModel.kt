@@ -3,6 +3,7 @@ package com.example.myapplication.ui.activitylog
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.database.IncidentDatabase
 import com.example.myapplication.data.repository.IncidentRepository
@@ -13,6 +14,12 @@ class ActivityLogViewModel(application: Application) : AndroidViewModel(applicat
 
     private val repository: IncidentRepository
     val allIncidents: LiveData<List<Incident>>
+    
+    private val _filteredIncidents = MutableLiveData<List<Incident>>()
+    val filteredIncidents: LiveData<List<Incident>> = _filteredIncidents
+    
+    private var startDateFilter: Long? = null
+    private var endDateFilter: Long? = null
 
     init {
         val incidentDao = IncidentDatabase.getDatabase(application).incidentDao()
@@ -34,6 +41,34 @@ class ActivityLogViewModel(application: Application) : AndroidViewModel(applicat
     fun deleteIncident(incidentId: String) {
         viewModelScope.launch {
             repository.deleteIncidentById(incidentId)
+        }
+    }
+    
+    fun setDateFilter(startDate: Long?, endDate: Long?) {
+        startDateFilter = startDate
+        endDateFilter = endDate
+        applyDateFilter()
+    }
+    
+    fun clearDateFilter() {
+        startDateFilter = null
+        endDateFilter = null
+        _filteredIncidents.value = null
+    }
+    
+    private fun applyDateFilter() {
+        if (startDateFilter != null && endDateFilter != null) {
+            viewModelScope.launch {
+                try {
+                    val filtered = repository.getIncidentsByDateRange(startDateFilter!!, endDateFilter!!)
+                    _filteredIncidents.value = filtered
+                } catch (e: Exception) {
+                    println("DEBUG: Error filtering incidents by date: ${e.message}")
+                    _filteredIncidents.value = emptyList()
+                }
+            }
+        } else {
+            _filteredIncidents.value = null
         }
     }
 }

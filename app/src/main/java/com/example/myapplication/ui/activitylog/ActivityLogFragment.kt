@@ -1,6 +1,7 @@
 package com.example.myapplication.ui.activitylog
 
 import android.app.AlertDialog
+import android.app.DatePickerDialog
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -23,6 +24,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.*
 
 class ActivityLogFragment : Fragment() {
 
@@ -34,6 +37,10 @@ class ActivityLogFragment : Fragment() {
     private lateinit var evidenceRepository: EvidenceAttachmentRepository
     private lateinit var pdfExporter: IncidentPdfExporter
     private var currentIncidents: List<Incident> = emptyList()
+    
+    private var startDateFilter: Long? = null
+    private var endDateFilter: Long? = null
+    private val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -53,6 +60,7 @@ class ActivityLogFragment : Fragment() {
         
         setupRecyclerView()
         setupExportButton()
+        setupDateFilterButtons()
         observeViewModel()
         
         // Debug: Add a test incident button temporarily
@@ -145,7 +153,7 @@ class ActivityLogFragment : Fragment() {
         lifecycleScope.launch {
             try {
                 val pdfFile = withContext(Dispatchers.IO) {
-                    pdfExporter.exportIncidents(currentIncidents)
+                    pdfExporter.exportIncidents(currentIncidents, startDateFilter, endDateFilter)
                 }
                 
                 // Share the PDF file
@@ -176,27 +184,113 @@ class ActivityLogFragment : Fragment() {
         }
     }
 
-    private fun observeViewModel() {
-        activityLogViewModel.allIncidents.observe(viewLifecycleOwner) { incidents ->
-            println("DEBUG: ActivityLog received ${incidents.size} incidents")
-            
-            // Store current incidents for export
-            currentIncidents = incidents
-            
-            // Update count display
-            binding.textIncidentCount.text = "${incidents.size} incident${if (incidents.size != 1) "s" else ""} found"
-            
-            if (incidents.isEmpty()) {
-                println("DEBUG: Showing empty state")
-                showEmptyState()
-            } else {
-                println("DEBUG: Showing incident list with ${incidents.size} items")
-                incidents.forEach { incident ->
-                    println("DEBUG: Incident: ${incident.incident_type} at ${incident.location}")
-                }
-                showIncidentList()
-                incidentAdapter.submitList(incidents)
+    private fun setupDateFilterButtons() {
+        binding.btnStartDate.setOnClickListener {
+            showDatePicker { selectedDate ->
+                startDateFilter = selectedDate
+                binding.btnStartDate.text = dateFormat.format(Date(selectedDate))
+                applyDateFilter()
             }
+        }
+        
+        binding.btnEndDate.setOnClickListener {
+            showDatePicker { selectedDate ->
+                // Set end date to end of day (23:59:59)
+                val calendar = Calendar.getInstance()
+                calendar.timeInMillis = selectedDate
+                calendar.set(Calendar.HOUR_OF_DAY, 23)
+                calendar.set(Calendar.MINUTE, 59)
+                calendar.set(Calendar.SECOND, 59)
+                calendar.set(Calendar.MILLISECOND, 999)
+                
+                endDateFilter = calendar.timeInMillis
+                binding.btnEndDate.text = dateFormat.format(Date(selectedDate))
+                applyDateFilter()
+            }
+        }
+        
+        binding.btnClearFilter.setOnClickListener {
+            clearDateFilter()
+        }
+    }
+    
+    private fun showDatePicker(onDateSelected: (Long) -> Unit) {
+        val calendar = Calendar.getInstance()
+        val datePickerDialog = DatePickerDialog(
+            requireContext(),
+            { _, year, month, dayOfMonth ->
+                calendar.set(year, month, dayOfMonth, 0, 0, 0)
+                calendar.set(Calendar.MILLISECOND, 0)
+                onDateSelected(calendar.timeInMillis)
+            },
+            calendar.get(Calendar.YEAR),
+            calendar.get(Calendar.MONTH),
+            calendar.get(Calendar.DAY_OF_MONTH)
+        )
+        datePickerDialog.show()
+    }
+    
+    private fun applyDateFilter() {
+        if (startDateFilter != null && endDateFilter != null) {
+            if (startDateFilter!! > endDateFilter!!) {
+                Toast.makeText(requireContext(), "Start date must be before end date", Toast.LENGTH_SHORT).show()
+                return
+            }
+            activityLogViewModel.setDateFilter(startDateFilter, endDateFilter)
+        }
+    }
+    
+    private fun clearDateFilter() {
+        startDateFilter = null
+        endDateFilter = null
+        binding.btnStartDate.text = "Start Date"
+        binding.btnEndDate.text = "End Date"
+        activityLogViewModel.clearDateFilter()
+    }
+
+    private fun observeViewModel() {
+        // Observe filtered incidents first
+        activityLogViewModel.filteredIncidents.observe(viewLifecycleOwner) { filteredIncidents ->
+            if (filteredIncidents != null) {
+                // Show filtered results
+                updateIncidentList(filteredIncidents, "filtered")
+            } else {
+                // Filter was cleared, show all incidents
+                activityLogViewModel.allIncidents.value?.let { allIncidents ->
+                    updateIncidentList(allIncidents, "all")
+                }
+            }
+        }
+        
+        // Observe all incidents
+        activityLogViewModel.allIncidents.observe(viewLifecycleOwner) { incidents ->
+            // Only show all incidents if no filter is active
+            if (activityLogViewModel.filteredIncidents.value == null) {
+                updateIncidentList(incidents, "all")
+            }
+        }
+    }
+    
+    private fun updateIncidentList(incidents: List<Incident>, source: String) {
+        println("DEBUG: ActivityLog received ${incidents.size} incidents from $source")
+        
+        // Store current incidents for export
+        currentIncidents = incidents
+        
+        // Update count display
+        val filterText = if (source == "filtered") " (filtered)" else ""
+        binding.textIncidentCount.text = "${incidents.size} incident${if (incidents.size != 1) "s" else ""} found$filterText"
+        
+        if (incidents.isEmpty()) {
+            println("DEBUG: Showing empty state")
+            showEmptyState()
+        } else {
+            println("DEBUG: Showing incident list with ${incidents.size} items")
+            incidents.forEach { incident ->
+                println("DEBUG: Incident: ${incident.incident_type} at ${incident.location}")
+            }
+            showIncidentList()
+            incidentAdapter.submitList(incidents)
         }
     }
 

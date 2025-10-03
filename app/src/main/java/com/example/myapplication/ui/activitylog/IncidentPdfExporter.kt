@@ -24,7 +24,7 @@ class IncidentPdfExporter(private val context: Context) {
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
     private val fileNameDateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
     
-    fun exportIncidents(incidents: List<Incident>): File {
+    fun exportIncidents(incidents: List<Incident>, startDate: Long? = null, endDate: Long? = null): File {
         val fileName = "incident_report_${fileNameDateFormat.format(Date())}.pdf"
         val file = File(context.filesDir, fileName)
         
@@ -53,6 +53,18 @@ class IncidentPdfExporter(private val context: Context) {
                     .setTextAlignment(TextAlignment.RIGHT)
                     .setMarginBottom(10f)
             )
+            
+            // Add date range information if filtered
+            if (startDate != null && endDate != null) {
+                val displayDateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+                document.add(
+                    Paragraph("Date Range: ${displayDateFormat.format(Date(startDate))} - ${displayDateFormat.format(Date(endDate))}")
+                        .setFont(font)
+                        .setFontSize(10f)
+                        .setTextAlignment(TextAlignment.RIGHT)
+                        .setMarginBottom(5f)
+                )
+            }
             
             document.add(
                 Paragraph("Total Incidents: ${incidents.size}")

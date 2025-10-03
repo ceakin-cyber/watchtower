@@ -48,4 +48,8 @@ class IncidentRepository(private val incidentDao: IncidentDao) {
     suspend fun getIncidentCount(): Int {
         return incidentDao.getIncidentCount()
     }
+    
+    suspend fun getIncidentsByDateRange(startDate: Long, endDate: Long): List<Incident> {
+        return incidentDao.getIncidentsByDateRange(startDate, endDate)
+    }
 }

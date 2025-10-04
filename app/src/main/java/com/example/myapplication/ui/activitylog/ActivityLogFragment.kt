@@ -36,6 +36,7 @@ class ActivityLogFragment : Fragment() {
     private lateinit var incidentAdapter: IncidentAdapter
     private lateinit var evidenceRepository: EvidenceAttachmentRepository
     private lateinit var pdfExporter: IncidentPdfExporter
+    private lateinit var jsonExporter: IncidentJsonExporter
     private var currentIncidents: List<Incident> = emptyList()
     
     private var startDateFilter: Long? = null
@@ -55,6 +56,7 @@ class ActivityLogFragment : Fragment() {
         val database = IncidentDatabase.getDatabase(requireActivity().application)
         evidenceRepository = EvidenceAttachmentRepository(database.evidenceAttachmentDao())
         pdfExporter = IncidentPdfExporter(requireContext())
+        jsonExporter = IncidentJsonExporter(requireContext())
 
         _binding = FragmentActivityLogBinding.inflate(inflater, container, false)
         
@@ -142,6 +144,11 @@ class ActivityLogFragment : Fragment() {
         binding.btnExportPdf.setOnClickListener {
             exportToPdf()
         }
+        
+        // Set up JSON export button
+        binding.btnExportJson.setOnClickListener {
+            exportToJson()
+        }
     }
 
     private fun exportToPdf() {
@@ -180,6 +187,44 @@ class ActivityLogFragment : Fragment() {
                 println("DEBUG: PDF export failed: ${e.message}")
                 e.printStackTrace()
                 Toast.makeText(requireContext(), "Failed to export PDF: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun exportToJson() {
+        if (currentIncidents.isEmpty()) {
+            Toast.makeText(requireContext(), "No incidents to export", Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        lifecycleScope.launch {
+            try {
+                val jsonFile = withContext(Dispatchers.IO) {
+                    jsonExporter.exportIncidents(currentIncidents, startDateFilter, endDateFilter)
+                }
+                
+                // Share the JSON file
+                val uri = FileProvider.getUriForFile(
+                    requireContext(),
+                    "${requireContext().packageName}.fileprovider",
+                    jsonFile
+                )
+                
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/json"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_SUBJECT, "Incident Activity Report (JSON)")
+                    putExtra(Intent.EXTRA_TEXT, "Please find the incident activity report in JSON format attached.")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                
+                val chooserIntent = Intent.createChooser(intent, "Export Incident Report (JSON)")
+                startActivity(chooserIntent)
+                
+                Toast.makeText(requireContext(), "JSON exported successfully", Toast.LENGTH_SHORT).show()
+                
+            } catch (e: Exception) {
+                Toast.makeText(requireContext(), "Failed to export JSON: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
     }

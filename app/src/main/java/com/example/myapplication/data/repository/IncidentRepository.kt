@@ -11,6 +11,10 @@ class IncidentRepository(private val incidentDao: IncidentDao) {
         return incidentDao.getAllIncidents()
     }
 
+    suspend fun getAllIncidentsSuspend(): List<Incident> {
+        return incidentDao.getAllIncidentsSuspend()
+    }
+
     suspend fun insertIncident(incident: Incident) {
         println("DEBUG: Repository inserting incident: ${incident.id}")
         incidentDao.insertIncident(incident)

@@ -2,17 +2,21 @@ package com.example.myapplication.ui.activitylog
 
 import android.content.Context
 import com.example.myapplication.ui.incident.Incident
+import com.example.myapplication.data.repository.ExportLogRepository
 import java.io.File
 import java.io.FileWriter
 import java.text.SimpleDateFormat
 import java.util.*
 
-class IncidentJsonExporter(private val context: Context) {
+class IncidentJsonExporter(
+    private val context: Context,
+    private val exportLogRepository: ExportLogRepository? = null
+) {
     
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
     private val fileNameDateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
     
-    fun exportIncidents(incidents: List<Incident>, startDate: Long? = null, endDate: Long? = null): File {
+    suspend fun exportIncidents(incidents: List<Incident>, startDate: Long? = null, endDate: Long? = null): File {
         val fileName = "incident_report_${fileNameDateFormat.format(Date())}.json"
         val file = File(context.filesDir, fileName)
         
@@ -66,6 +70,16 @@ class IncidentJsonExporter(private val context: Context) {
         FileWriter(file).use { writer ->
             writer.write(json.toString())
         }
+        
+        // Log the export
+        exportLogRepository?.logExport(
+            exportType = "JSON",
+            incidentCount = incidents.size,
+            fileName = fileName,
+            file = file,
+            dateRangeStart = startDate,
+            dateRangeEnd = endDate
+        )
         
         return file
     }

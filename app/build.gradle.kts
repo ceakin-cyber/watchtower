@@ -66,6 +66,9 @@ dependencies {
     // PDF generation
     implementation("com.itextpdf:itext7-core:7.2.5")
     
+    // Chart library for pie charts
+    implementation("com.github.PhilJay:MPAndroidChart:v3.1.0")
+    
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

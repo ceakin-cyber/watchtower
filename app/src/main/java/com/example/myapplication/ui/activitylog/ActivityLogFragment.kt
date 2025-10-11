@@ -326,6 +326,7 @@ class ActivityLogFragment : Fragment() {
         val filterText = if (source == "filtered") " (filtered)" else ""
         binding.textIncidentCount.text = "${incidents.size} incident${if (incidents.size != 1) "s" else ""} found$filterText"
         
+        
         if (incidents.isEmpty()) {
             println("DEBUG: Showing empty state")
             showEmptyState()
@@ -459,6 +460,7 @@ class ActivityLogFragment : Fragment() {
             true
         }
     }
+
 
     override fun onDestroyView() {
         super.onDestroyView()

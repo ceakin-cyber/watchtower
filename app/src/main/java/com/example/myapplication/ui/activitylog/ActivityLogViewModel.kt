@@ -15,8 +15,8 @@ class ActivityLogViewModel(application: Application) : AndroidViewModel(applicat
     private val repository: IncidentRepository
     val allIncidents: LiveData<List<Incident>>
     
-    private val _filteredIncidents = MutableLiveData<List<Incident>>()
-    val filteredIncidents: LiveData<List<Incident>> = _filteredIncidents
+    private val _filteredIncidents = MutableLiveData<List<Incident>?>()
+    val filteredIncidents: LiveData<List<Incident>?> = _filteredIncidents
     
     private var startDateFilter: Long? = null
     private var endDateFilter: Long? = null

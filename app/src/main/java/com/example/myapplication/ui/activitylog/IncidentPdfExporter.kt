@@ -2,6 +2,7 @@ package com.example.myapplication.ui.activitylog
 
 import android.content.Context
 import com.example.myapplication.ui.incident.Incident
+import com.example.myapplication.data.repository.ExportLogRepository
 import com.itextpdf.kernel.pdf.PdfDocument
 import com.itextpdf.kernel.pdf.PdfWriter
 import com.itextpdf.layout.Document
@@ -19,12 +20,15 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
-class IncidentPdfExporter(private val context: Context) {
+class IncidentPdfExporter(
+    private val context: Context,
+    private val exportLogRepository: ExportLogRepository? = null
+) {
     
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
     private val fileNameDateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
     
-    fun exportIncidents(incidents: List<Incident>, startDate: Long? = null, endDate: Long? = null): File {
+    suspend fun exportIncidents(incidents: List<Incident>, startDate: Long? = null, endDate: Long? = null): File {
         val fileName = "incident_report_${fileNameDateFormat.format(Date())}.pdf"
         val file = File(context.filesDir, fileName)
         
@@ -92,6 +96,16 @@ class IncidentPdfExporter(private val context: Context) {
         } finally {
             document.close()
         }
+        
+        // Log the export
+        exportLogRepository?.logExport(
+            exportType = "PDF",
+            incidentCount = incidents.size,
+            fileName = fileName,
+            file = file,
+            dateRangeStart = startDate,
+            dateRangeEnd = endDate
+        )
         
         return file
     }

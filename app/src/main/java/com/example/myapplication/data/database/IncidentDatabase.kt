@@ -11,8 +11,8 @@ import com.example.myapplication.ui.incident.Incident
 import com.example.myapplication.data.security.DatabaseEncryption
 
 @Database(
-    entities = [Incident::class, EvidenceAttachment::class, EmergencyContact::class],
-    version = 7,
+    entities = [Incident::class, EvidenceAttachment::class, EmergencyContact::class, ExportLog::class],
+    version = 8,
     exportSchema = false
 )
 @TypeConverters(EncryptionConverters::class)
@@ -21,6 +21,7 @@ abstract class IncidentDatabase : RoomDatabase() {
     abstract fun incidentDao(): IncidentDao
     abstract fun evidenceAttachmentDao(): EvidenceAttachmentDao
     abstract fun emergencyContactDao(): EmergencyContactDao
+    abstract fun exportLogDao(): ExportLogDao
     
     companion object {
         @Volatile
@@ -50,6 +51,24 @@ abstract class IncidentDatabase : RoomDatabase() {
             }
         }
         
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Add export logs table
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS export_logs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        exportType TEXT NOT NULL,
+                        exportedAt INTEGER NOT NULL,
+                        incidentCount INTEGER NOT NULL,
+                        dateRangeStart INTEGER,
+                        dateRangeEnd INTEGER,
+                        fileName TEXT NOT NULL,
+                        fileSize INTEGER NOT NULL DEFAULT 0
+                    )
+                """)
+            }
+        }
+        
         fun getDatabase(context: Context): IncidentDatabase {
             return INSTANCE ?: synchronized(this) {
                 println("DEBUG: Creating new database instance")
@@ -63,7 +82,7 @@ abstract class IncidentDatabase : RoomDatabase() {
                     IncidentDatabase::class.java,
                     "incident_database"
                 )
-                .addMigrations(MIGRATION_5_6, MIGRATION_6_7)
+                .addMigrations(MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
                 .fallbackToDestructiveMigration()
                 .addCallback(object : RoomDatabase.Callback() {
                     override fun onCreate(db: SupportSQLiteDatabase) {

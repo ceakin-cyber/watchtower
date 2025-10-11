@@ -19,6 +19,7 @@ import com.example.myapplication.ui.incident.Incident
 import com.example.myapplication.data.database.EvidenceAttachment
 import com.example.myapplication.data.database.IncidentDatabase
 import com.example.myapplication.data.repository.EvidenceAttachmentRepository
+import com.example.myapplication.data.repository.ExportLogRepository
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -35,6 +36,7 @@ class ActivityLogFragment : Fragment() {
     private lateinit var activityLogViewModel: ActivityLogViewModel
     private lateinit var incidentAdapter: IncidentAdapter
     private lateinit var evidenceRepository: EvidenceAttachmentRepository
+    private lateinit var exportLogRepository: ExportLogRepository
     private lateinit var pdfExporter: IncidentPdfExporter
     private lateinit var jsonExporter: IncidentJsonExporter
     private var currentIncidents: List<Incident> = emptyList()
@@ -55,8 +57,9 @@ class ActivityLogFragment : Fragment() {
 
         val database = IncidentDatabase.getDatabase(requireActivity().application)
         evidenceRepository = EvidenceAttachmentRepository(database.evidenceAttachmentDao())
-        pdfExporter = IncidentPdfExporter(requireContext())
-        jsonExporter = IncidentJsonExporter(requireContext())
+        exportLogRepository = ExportLogRepository(database.exportLogDao())
+        pdfExporter = IncidentPdfExporter(requireContext(), exportLogRepository)
+        jsonExporter = IncidentJsonExporter(requireContext(), exportLogRepository)
 
         _binding = FragmentActivityLogBinding.inflate(inflater, container, false)
         
